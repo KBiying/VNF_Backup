@@ -9,58 +9,134 @@ import copy
 logging.basicConfig(level=logging.INFO)
 
 
-
 def solver():
-    sfcs = ["1", "2"]# f      
-    vnfs = ["1", "2"]# i 
-    servers = ["1", "2" ,"3"]# v
+    # sfcs = ["1", "2"]# f      
+    # vnfs = ["1", "2"]# i 
+    # servers = ["1", "2" ,"3"]# v
+    sfcs = []
+    vnfs_of_sfc = {}
+    servers = []
+    vnfs = []
+    num_of_sfcs = 6
+    num_of_vnfs = 4
+    num_of_servers = 7
+    total_resource = {}
+    o = []
+    v_resource = {}
+    a_resource = {}
+    w = {}
+    beta = []
+
     y_edge_lp = {}
     y_cloud_lp = {}
     timer = {}
     t1 = 10
     t2 = 50
     # Backup cost of sfcs f
-    w = {
-        "1": 12,
-        "2": 12,
-    }  
+    # w = {
+    #     "1": 12,
+    #     "2": 12,
+    # }  
 
-    #每个server上的total resource 
-    total_resource = {
-        "1": 16,# origin18 test 30
-        "2": 18,
-        "3": 16,
-    }
+    # #每个server上的total resource 
+    # total_resource = {
+    #     "1": 16,# origin18 test 30
+    #     "2": 18,
+    #     "3": 16,
+    # }
 
     # resouces demand of VNFs i of sfcs f
-    beta = [   # vnfs
-        # 1 2
-        [8, 4], # 1 sfcs
-        [8, 4], # 2
-    ]
-    beta = makeDict([sfcs, vnfs], beta, 0)
-    # Resource demand on v before deploying static backups server v 被用了的资源
-    a_resource = {
-        "1": 8,
-        "2": 12,
-        "3": 4,
-    }
-    v_resource = {
-        "1": 8,
-        "2": 4,
-    }
+    # beta = [   # vnfs
+    #     # 1 2
+    #     [8, 4], # 1 sfcs
+    #     [8, 4], # 2
+    # ]
+    # beta = makeDict([sfcs, vnfs], beta, 0)
+    # # Resource demand on v before deploying static backups server v 被用了的资源
+    # a_resource = {
+    #     "1": 8,
+    #     "2": 12,
+    #     "3": 4,
+    # }
+    # # v_resource = {
+    #     "1": 8,
+    #     "2": 4,
+    # }
     # Server holding the VNF i of   f
-    o = [   #vnfs
-        # 1    2
-        ["1", "2"], # 1 sfcs
-        ["2", "3"], # 2
-    ]
-    o = makeDict([sfcs, vnfs], o, None)
-    vnfs_of_sfc = {
-        "1":["1", "2"],
-        "2":["1", "2"],
-    }
+    # o = [   #vnfs
+    #     # 1    2
+    #     ["1", "2"], # 1 sfcs
+    #     ["2", "3"], # 2
+    # ]
+    # o = makeDict([sfcs, vnfs], o, None)
+    # vnfs_of_sfc = {
+    #     "1":["1", "2"],
+    #     "2":["1", "2"],
+    # }
+    for i in range(1,num_of_sfcs):
+        sfcs.append(str(i))
+    logging.info('sfcs = {}'.format(sfcs))
+    for i in range(1, num_of_vnfs):
+        vnfs.append(str(i))
+    logging.info('vnfs = {}'.format(vnfs))
+    for f in sfcs:
+        vnfs_of_sfc[f] = []
+        for i in range(1, num_of_vnfs):
+            vnfs_of_sfc[f].append(str(i))
+    logging.info('vnfs_of_sfc = {}'.format(vnfs_of_sfc))
+    for i in range(1, num_of_servers):
+        servers.append(str(i))
 
+    for i in vnfs:
+        v_resource[i] = random.randint(1, 10)
+
+    for v in servers:
+        total_resource[v] = random.randint(9, 30)
+
+    for f in sfcs:
+        cost = 0
+        for i in vnfs_of_sfc[f]:
+            cost += v_resource[i]
+        w[f] = cost
+
+    #随机分配
+    for j in range(len(sfcs)):
+        temp = []
+        for i in vnfs:
+            place = random.choice(servers)
+            temp.append(place)
+        o.append(temp)
+        logging.info('-----temp = {}'.format(temp))
+    o = makeDict([sfcs, vnfs], o, None)    
+    for f in sfcs:
+        temp = []
+        for i in vnfs_of_sfc[f]:
+            temp.append(v_resource[i])
+        beta.append(temp)
+    beta = makeDict([sfcs, vnfs], beta, 0)
+    # # Resource demand on v before deploying static backups server v 被用了的资源
+    # a_resource = {
+    #     "1": 8,
+    #     "2": 12,
+    #     "3": 4,
+    # }
+    # Server holding the VNF i of   f
+    # o = [   #vnfs
+    #     # 1    2
+    #     ["1", "2"], # 1 sfcs
+    #     ["2", "3"], # 2
+    # ]
+
+    for v in servers:
+        a_resource[v] = 0
+
+    for f in sfcs:
+        for i in vnfs:
+
+            a_resource[o[f][i]] += v_resource[i]
+            logging.info('a_resource[{}] = {}'.format(o[f][i], a_resource[o[f][i]]))
+    
+    
 
     def lpSolver():
         # global y_cloud_lp
@@ -141,8 +217,9 @@ def solver():
                 if y_edge_lp[(f, i, v)] > max:
                     max = y_edge_lp[(f, i, v)]
                     temp = (f,i,v)
-            y_edge[temp] = 1
-            a_resource[temp[2]] += v_resource[i]
+            if temp != ():
+                y_edge[temp] = 1
+                a_resource[temp[2]] += v_resource[i]
     logging.info('y_edge: {}'.format(y_edge))
 
     threshold = list(y_cloud_lp.values())[0]
@@ -169,7 +246,7 @@ def solver():
     # o_staticBackup = {"1":[], "2":[]}       # 静态备份vnf 1、2 存放在哪些个server上
     o_vnf = {}
     o_staticBackup = {}
-    placed_server = {"1":[], "2":[]}        # 放了 vnf1和静态备份的server合集
+    placed_server = {}        # 放了 vnf1和静态备份的server合集
     deploying = {}
     deploying_list = []                  
     load_max = []
@@ -202,7 +279,7 @@ def solver():
         for v in servers:
             eta[(n, v)] = 0  
         remaining_servers = copy.deepcopy(servers)
-        placed_server = {"1":[], "2":[]}
+        placed_server = {}
         # 先检查有没有可恢复的云到边缘
         for t in sfcs:
             if t in timer:
@@ -241,6 +318,7 @@ def solver():
                         logging.info('b_resource = {}'.format(b_resource))    
                             
                         for i in vnfs:
+                            placed_server[i] = []
                             for num in o_vnf[i]:
                                 placed_server[i].append(num)
                                 
@@ -269,6 +347,7 @@ def solver():
         logging.info('b_resource = {}'.format(b_resource))    
             
         for i in vnfs:
+            placed_server[i] = []
             for num in o_vnf[i]:
                 placed_server[i].append(num)
                 
@@ -290,7 +369,7 @@ def solver():
                 sum += gama[k_set[j]] / total_resource[v] * x[(k_set[j],v)]
                 logging.info('sum = {}'.format(sum))
             if (b_resource[v]/total_resource[v] + sum) > 1:
-                remaining_servers.remove[v]
+                remaining_servers.remove(v)
         
         # Backup adjustment if there is no qualified servers then terminate the algorithm and execute 
         if len(remaining_servers) == 0:
@@ -344,7 +423,7 @@ def solver():
                 else:
                     x[(k_set[kth-1], qualified_server)] = 1
                     a_resource[qualified_server] += v_resource[k_set[kth-1]]
-                    logging.info("x{}{} = 1".format(k_set[kth-1], qualified_server))
+                    logging.info("x[{}][{}] = 1".format(k_set[kth-1], qualified_server))
                     eta[(n, qualified_server)] = eta[(n, qualified_server)] + delta[(n, k_set[kth-1], qualified_server)]
                     kth += 1
                     n=1
