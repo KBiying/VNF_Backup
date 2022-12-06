@@ -5,6 +5,7 @@ import logging
 import random
 from functools import cmp_to_key
 import copy
+from matplotlib import pyplot as plt
 
 logging.basicConfig(level=logging.INFO)
 
@@ -235,12 +236,17 @@ def solver():
 
     # -------------- dynamic backup ---------------------
     
-    k_set= ["1","2"]                        # 随时到达的动态备份集
+    #k_set= ["1","2"]                        # 随时到达的动态备份集
+    k_set = copy.deepcopy(vnfs)
     kth = 1                                   # 记录目前的在备份 第k个 dynamic backup
-    gama = {                                # resource demand of the dynamic backup k
-        "1": 8,
-        "2": 4,
-    }        
+    # gama = {                                # resource demand of the dynamic backup k
+    #     "1": 8,
+    #     "2": 4,
+    # }   
+    gama = {}
+    for i in vnfs:
+        gama[i] = v_resource[i]
+       
     b_resource = {}                         # compute current resource demand on server v before deploy dynamic backup.
     # o_vnf = {"1":["1","2"], "2":["2","3"]}  # 原vnf1、2存放在哪些server上
     # o_staticBackup = {"1":[], "2":[]}       # 静态备份vnf 1、2 存放在哪些个server上
@@ -432,4 +438,64 @@ def solver():
                 n+=1
 
             logging.info('x = {}'.format(x))
+            # cacluate load
+            logging.info('b_resource = {}'.format(b_resource))
+            logging.info('gama = {}'.format(gama))
+    load = []
+    for v in servers:
+        sum = 0
+        for i in k_set:
+            sum += gama[i]*x[(i, v)]
+        load.append((b_resource[v] + sum) / total_resource[v])
+    logging.info('load = {}'.format(load))
+
+    # vs LP
+
+    # ----------------- Problem --------------------------
+    prob2 = LpProblem("minimize load", sense=LpMinimize)
+
+    # ----------------- Variables ------------------------
+    z = pulp.LpVariable.dicts('z', indices = (k_set, servers), lowBound=0, upBound=1, cat=LpContinuous)
+
+    # ---------------- -Objective ------------------------
+    for v in servers:
+        prob2 += b_resource[v]/total_resource[v] + pulp.lpSum((gama[k] / total_resource[k]) *z[k][v] for k in k_set)
+
+    # ----------------- Constraints ----------------------
+    for v in servers:
+        prob2 += b_resource[v]/total_resource[v] + pulp.lpSum((gama[k] / total_resource[k]) * z[k][v] for k in k_set) <= 1
+    
+    for k in k_set:
+        prob2 += pulp.lpSum(z[k][v] for v in servers) == 1
+    
+    for k in k_set:
+        for v in placed_server:
+            prob2 += z[k][v] == 0
+    # ---------------- Solving ---------------------------
+    prob2.solve()
+
+    for v in prob2.variables():
+        logging.info('{} = {}'.format(v.name, v.varValue))
+
+    loadLP =  []
+    for v in servers:
+        sum = 0
+        for i in k_set:
+            sum += gama[i]*(z[i][v].value())
+        loadLP.append((b_resource[v] + sum) / total_resource[v])
+    logging.info('load_LP = {}'.format(loadLP))
+    
+    # painting
+    plt.plot(servers, load, label = 'dynamic adjustment')
+    plt.plot(servers, loadLP, linestyle='dashed', label = 'LP')
+    plt.xlabel("serverID")
+    plt.ylabel("Load")
+    plt.title("Load of each server")
+    plt.legend()
+    plt.show()
+
+
+
 solver()
+
+
